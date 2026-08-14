@@ -1,0 +1,16 @@
+# Research / scratch — not part of the repo
+.research/
+.research-codegraph/
+
+# Node
+node_modules/
+
+# CodeGraph index (the tool self-ignores its own dir; belt and suspenders)
+.codegraph/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
