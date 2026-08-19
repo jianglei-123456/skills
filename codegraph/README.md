@@ -23,7 +23,7 @@ Creates `.codegraph/` in the project root (self-gitignored; contains `codegraph.
 
 ## What agents run (read-only)
 
-See [SKILL.md](SKILL.md) for the full reference: `status`, `explore`, `query`, `node`, `callers`, `callees`, `impact`, `affected`, `files`, `--version`. Everything else (`init`, `index`, `sync`, `install`, …) is human-only.
+See [SKILL.md](SKILL.md) for the quick reference; full command syntax lives in [references/commands.md](references/commands.md): `status`, `explore`, `query`, `node`, `callers`, `callees`, `impact`, `affected`, `files`, `--version`. Everything else (`init`, `index`, `sync`, `install`, …) is human-only.
 
 ## Telemetry
 
