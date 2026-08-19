@@ -1,6 +1,6 @@
 ---
 name: codegraph
-description: Code intelligence via the codegraph CLI. Use when the project has a .codegraph/ directory (a prebuilt code-intelligence index) and you need to explore code — find symbols, read source with call paths, trace callers/callees, assess change impact, or find affected tests — faster than grep/read loops. Read-only commands only; never initializes or reindexes. Gate: no .codegraph/ → skill does not apply.
+description: "Code intelligence via the codegraph CLI. Use when the project has a .codegraph/ directory (a prebuilt code-intelligence index) and you need to explore code — find symbols, read source with call paths, trace callers/callees, assess change impact, or find affected tests — faster than grep/read loops. Read-only commands only; never initializes or reindexes. Gate: no .codegraph/ → skill does not apply."
 ---
 
 # CodeGraph — explore code through its prebuilt index

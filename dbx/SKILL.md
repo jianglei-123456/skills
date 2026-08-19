@@ -1,6 +1,6 @@
 ---
 name: dbx
-description: Database access via the dbx CLI. Use when the user needs database work — run SQL queries, inspect tables or schemas, list connections — against databases preconfigured in DBX (PostgreSQL/Redshift, MySQL-compatible, SQLite, …). Read-only by default; writes require explicit opt-in flags. Gate: dbx CLI not installed → tell the user, do not install.
+description: "Database access via the dbx CLI. Use when the user needs database work — run SQL queries, inspect tables or schemas, list connections — against databases preconfigured in DBX (PostgreSQL/Redshift, MySQL-compatible, SQLite, …). Read-only by default; writes require explicit opt-in flags. Gate: dbx CLI not installed → tell the user, do not install."
 ---
 
 # DBX — query databases through preconfigured connections
