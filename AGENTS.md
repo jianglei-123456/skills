@@ -22,6 +22,24 @@ A collection of reusable, **agent-agnostic skills** for AI coding agents. Each s
 - **Action:** read `dbx/SKILL.md` and use the `dbx` CLI via bash (`doctor`, `connections list`, `schema list/describe`, `query`, `context`, `open`); full syntax in `dbx/references/commands.md`.
 - **Gate:** `dbx: command not found`, or the requested connection is missing from `dbx connections list` → tell the user (install the CLI / create the connection in DBX Desktop); agents never install the CLI or create connections. Queries are read-only by default; write flags (`--allow-writes`, `--allow-dangerous-sql`) only when the user explicitly asks.
 
+## The codebuddy会话总结 skill — when to use it
+
+- **Trigger:** the user asks to 总结/回顾/查询 their past CodeBuddy coding sessions — what they built on a given day or range of days, across projects (e.g. "总结下18,19,20这三天都开发了什么东西").
+- **Action:** read `codebuddy-session-summary/SKILL.md` and run `python codebuddy-session-summary/scripts/summarize_sessions.py --since YYYY-MM-DD [--until YYYY-MM-DD]` (options: `--days N`, `--project <name>`, `--root <dir>`); group output by day into a digest in the user's language.
+- **Gate:** no `*.jsonl` transcripts under `~/.codebuddy/projects/` → tell the user no session history was found; never invent content.
+
+## The topic-note skill — when to use it
+
+- **Trigger:** the user asks for a topic researched and written up as a **single** document — a report, a study note, an overview (e.g. "整理一份关于 X 的文档").
+- **Action:** read `topic-note/SKILL.md` and follow its workflow: scope → background-agent research → write one Markdown file in the user's language → land it in the current directory (or a user-specified path).
+- **Gate:** the output is exactly one document — never multiple files, never folder structures; write only from researched sources, never from parametric knowledge.
+
+## The dt-cabin-modify skill — explicit invocation only
+
+- **Trigger:** NONE — this skill must NOT fire on natural language. The user must explicitly invoke it (e.g. `/dt-cabin-modify`) before any of its scripts run.
+- **Action:** read `dt-cabin-modify/SKILL.md` and follow its flow: confirm inputs (IMEI, target owner company) → `get_token.py` → `preview.py` (show all dbx lookups to the user, await confirmation) → `run_flow.py --yes` (update sale info, conditional install delete, three install inserts, 5s delay + updateUserInfo).
+- **Gate:** only run when the user explicitly asks for this skill; never auto-trigger on mentions of 座舱/生产企业/IMEI changes.
+
 ## General rule for consuming skills
 
 Always honor a skill's gate conditions: a skill that requires a precondition (like an existing `.codegraph/` directory) must not be force-used, and must not trigger the precondition itself.

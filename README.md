@@ -9,6 +9,8 @@ Each skill is a self-contained directory with a `SKILL.md` that tells the agent 
 | Skill | What it does | Requires |
 |---|---|---|
 | [codegraph](codegraph/) | Explore a codebase through its prebuilt code-intelligence graph: symbol search, source with call paths, change-impact analysis, affected tests — no grep/read loops. | `codegraph` CLI + a `.codegraph/` index in the target project |
+| [codebuddy会话总结](codebuddy-session-summary/) | Summarize past CodeBuddy coding sessions: extract AI titles and first user messages from `~/.codebuddy/projects/*/*.jsonl`, group by day. | Python 3 |
+| [dt-cabin-modify](dt-cabin-modify/) | Modify a device's owner company on the DT platform and rebuild install/machine/owner records. Explicit invocation only — never auto-triggers. Includes env checks (dbx CLI, credentials via env vars, dbx connection). | Python 3, `dbx` CLI, `DT_USERNAME`/`DT_PASSWORD` env vars |
 
 ## Quick start
 
