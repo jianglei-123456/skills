@@ -1,6 +1,15 @@
 # dt-cabin-modify — DT 座舱信息修改
 
-修改 DT 平台（dss.datian360.com / ss-iot.dtwl360.com）上某 IMEI 设备的生产企业，并重建安装/农机/机主信息。**必须显式调用本 skill**（如 `/dt-cabin-modify`）才会运行，不响应任何自然语言触发。
+修改 DT 平台（dss.datian360.com / ss-iot.dtwl360.com）上某 IMEI 设备的归属企业（iot 字段 `ownerCompany`，原称"生产企业"），并重建安装/农机/机主信息。**必须显式调用本 skill**（如 `/dt-cabin-modify`）才会运行，不响应任何自然语言触发。
+
+## 概念澄清
+
+| 术语 | iot 字段 | 脚本参数 | 说明 |
+|---|---|---|---|
+| **归属企业**（原"生产企业"） | `ownerCompany` / `ownerCompanyId` | `--owner-company` | 设备的归属/销售主体，从 `basic.company` 按名字查 id/name |
+| **农机企业**（保持不变） | `company` | `--company` | 农机（机具）关联企业，用于按该企业的 `company_id` 查 `model.model` 型号 |
+
+> 历史命名：**归属企业**此前被称为"生产企业"，现已澄清更名，含义不变；脚本/接口中的参数名（`--owner-company`、`ownerCompany*` 字段）和 `ownerCompanyTypeName` 的接口值"生产企业"均属于既有契约，保持不变。
 
 ## 前置条件
 
@@ -77,7 +86,7 @@ $env:DBX_CONNECTION = "你的其他连接名"
 
 | 表 | 用途 |
 |---|---|
-| `basic.company` | 按名字查生产企业 id/name（`select id,name from basic.company where name='...'`） |
+| `basic.company` | 按名字查归属企业 id/name（`select id,name from basic.company where name='...'`） |
 | `model.model` | 按 company_id+model 查型号与品目（注意列名是下划线：`category_id1/2/3`、`class_name3`） |
 
 ## 正常使用流程
@@ -91,7 +100,7 @@ $env:DBX_CONNECTION = "你的其他连接名"
 | 输入 | 必填 | 示例 |
 |---|---|---|
 | IMEI | 是 | `YS0285093740549` |
-| 目标生产企业 | 是 | `潍坊市昱坤农业机械有限公司` |
+| 目标归属企业 | 是 | `潍坊市昱坤农业机械有限公司` |
 | 农机企业 | 否（默认 `第一拖拉机股份有限公司`） | `潍坊市昱坤农业机械有限公司` |
 | 农机型号 | 否（默认 `LP2204-C`） | `YK2004` |
 
@@ -117,14 +126,14 @@ TOKEN=$(python "E:/Dev/jianglei/skills/dt-cabin-modify/scripts/get_token.py")
 
 ```bash
 python "E:/Dev/jianglei/skills/dt-cabin-modify/scripts/preview.py" \
-  --token "$TOKEN" --imei <IMEI> --owner-company "<目标生产企业>" \
+  --token "$TOKEN" --imei <IMEI> --owner-company "<目标归属企业>" \
   [--company "<农机企业>"] [--model "<农机型号>"]
 ```
 
 展示以下数据，**必须等待用户确认后才能继续**：
 
-- `[1] 设备当前信息` — 现有生产企业/型号/品目/terminal 等
-- `[2] 目标生产企业` — `basic.company` 查出的 id/name
+- `[1] 设备当前信息` — 现有归属企业/型号/品目/terminal 等
+- `[2] 目标归属企业` — `basic.company` 查出的 id/name
 - `[3] 农机企业+型号` — `model.model` 查出的 id/categoryId1-3/class_name3
 - `[4] 安装记录` — 是否有安装记录（全流程不再删除，只作展示）
 - `[5] 决策汇总` — 是否需要更新、是否有中止条件
@@ -137,7 +146,7 @@ python "E:/Dev/jianglei/skills/dt-cabin-modify/scripts/preview.py" \
 
 ```bash
 python "E:/Dev/jianglei/skills/dt-cabin-modify/scripts/run_flow.py" \
-  --token "$TOKEN" --imei <IMEI> --owner-company "<目标生产企业>" \
+  --token "$TOKEN" --imei <IMEI> --owner-company "<目标归属企业>" \
   [--company "<农机企业>"] [--model "<农机型号>"] --yes
 ```
 
@@ -145,7 +154,7 @@ python "E:/Dev/jianglei/skills/dt-cabin-modify/scripts/run_flow.py" \
 
 | 顺序 | 动作 |
 |---|---|
-| 1 | 更新销售信息：生产企业 + 时间字段（sellTime/sendTime/commServiceBeginDate=今天00:00:00，commServiceEndDate=3年后00:00:00） |
+| 1 | 更新销售信息：归属企业 + 时间字段（sellTime/sendTime/commServiceBeginDate=今天00:00:00，commServiceEndDate=3年后00:00:00） |
 | 2 | 写入① installIotInsert（安装信息，body 示例 + 替换 imei） |
 | 3 | 写入② installIotMachine（农机信息：dbx 查 company/model、随机 factoryNumber、productionDate=今天） |
 | 4 | 写入③ installIotOwner（机主信息，body 示例 + 替换 imei） |
@@ -205,7 +214,7 @@ python "E:/Dev/jianglei/skills/dt-cabin-modify/scripts/query_by_imei.py" \
 | `get_token.py` | 登录拿 token | 只读 |
 | `query_by_imei.py` | 查设备信息 | 只读 |
 | `preview.py` | 预查询全部数据并展示 | 只读 |
-| `update_sale_info.py` | 更新生产企业/时间 | 写入 |
+| `update_sale_info.py` | 更新归属企业/时间 | 写入 |
 | `handle_install.py` | 查安装记录（`--no-delete` 只查不删） | 默认只读 |
 | `install_iot_insert.py` | 写入① 安装信息 | 写入 |
 | `install_iot_machine_insert.py` | 写入② 农机信息 | 写入 |

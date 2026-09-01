@@ -1,19 +1,28 @@
 ---
 name: dt-cabin-modify
-description: "DT 座舱信息修改：修改 IMEI 设备的生产企业，并重建安装/农机/机主信息。NOT auto-triggered by natural language — invoke this skill explicitly (e.g. /dt-cabin-modify) before running any of its scripts. Once invoked, it runs a confirmed, ordered write chain against the DT platform (dss.datian360.com / ss-iot.dtwl360.com) plus dbx lookups (prod_192.168.5.17_machine)."
-argument-hint: "IMEI、目标生产企业（以及可选的农机企业/型号）"
+description: "DT 座舱信息修改：修改 IMEI 设备的归属企业（iot 字段 ownerCompany，原称生产企业），并重建安装/农机/机主信息。NOT auto-triggered by natural language — invoke this skill explicitly (e.g. /dt-cabin-modify) before running any of its scripts. Once invoked, it runs a confirmed, ordered write chain against the DT platform (dss.datian360.com / ss-iot.dtwl360.com) plus dbx lookups (prod_192.168.5.17_machine)."
+argument-hint: "IMEI、目标归属企业（以及可选的农机企业/型号）"
 ---
 
 # DT 座舱信息修改
 
-修改某 IMEI 设备在 DT 平台上的**生产企业**，并重建其安装记录。只接受**显式调用**（用户明确要求执行此 skill 才运行），不响应任何自然语言触发。
+修改某 IMEI 设备在 DT 平台上的**归属企业**，并重建其安装记录。只接受**显式调用**（用户明确要求执行此 skill 才运行），不响应任何自然语言触发。
+
+## 概念澄清
+
+| 术语 | iot 字段 | 脚本参数 | 说明 |
+|---|---|---|---|
+| **归属企业**（原"生产企业"） | `ownerCompany` / `ownerCompanyId` | `--owner-company` | 设备的归属/销售主体，从 `basic.company` 按名字查 id/name |
+| **农机企业**（保持不变） | `company` | `--company` | 农机（机具）关联企业，用于按该企业的 `company_id` 查 `model.model` 型号 |
+
+> 历史命名：**归属企业**此前被称为"生产企业"，现已澄清更名，含义不变；脚本/接口中的参数名（`--owner-company`、`ownerCompany*` 字段）和 `ownerCompanyTypeName` 的接口值"生产企业"均属于既有契约，保持不变。
 
 ## 调用前确认（必须）
 
 向用户确认三个输入：
 
 1. **IMEI**（必填）
-2. **目标生产企业**（必填，改为谁，如 `山东天海重工有限公司`）
+2. **目标归属企业**（必填，改为谁，如 `山东天海重工有限公司`）
 3. **农机企业 / 农机型号**（可选，默认 `第一拖拉机股份有限公司` / `LP2204-C`）
 
 ## Step 0: 环境检查
@@ -38,7 +47,7 @@ flowchart LR
     B --> C[Step 2 预查询+展示]
     C --> D{用户确认?}
     D -->|否| E[中止]
-    D -->|是| F[Step 3 更新生产企业]
+    D -->|是| F[Step 3 更新归属企业]
     F --> G[Step 4 三个写入接口]
     G --> H[Step 5 等5s + updateUserInfo]
 ```
@@ -55,25 +64,25 @@ TOKEN=$(python "E:/Dev/jianglei/skills/dt-cabin-modify/scripts/get_token.py")
 
 ```bash
 python "E:/Dev/jianglei/skills/dt-cabin-modify/scripts/preview.py" \
-  --token "$TOKEN" --imei <IMEI> --owner-company "<目标生产企业>" \
+  --token "$TOKEN" --imei <IMEI> --owner-company "<目标归属企业>" \
   [--company "<农机企业>"] [--model "<农机型号>"]
 ```
 
 一次性查询并展示（全部只读，不产生任何写入）：
 
-- `[1] 设备当前信息` — queryByImei 返回的现有生产企业/型号/品目/terminal 等
-- `[2] 目标生产企业` — `basic.company` 按名字查 id/name
+- `[1] 设备当前信息` — queryByImei 返回的现有归属企业/型号/品目/terminal 等
+- `[2] 目标归属企业` — `basic.company` 按名字查 id/name
 - `[3] 农机企业+型号` — `basic.company`（农机企业）+ `model.model` 按 `company_id`+`model` 查 id/categoryId1-3/class_name3
 - `[4] 安装记录` — sales/install/view，有记录则提示将删除
-- `[5] 决策汇总` — 是否需要更新生产企业、是否有中止条件
+- `[5] 决策汇总` — 是否需要更新归属企业、是否有中止条件
 
-**等待用户确认后再进入 Step 3。** 任何 [ABORT]（生产企业/农机企业/型号未查到）出现时流程不得继续。
+**等待用户确认后再进入 Step 3。** 任何 [ABORT]（归属企业/农机企业/型号未查到）出现时流程不得继续。
 
 ## Step 3-5: 执行全流程
 
 ```bash
 python "E:/Dev/jianglei/skills/dt-cabin-modify/scripts/run_flow.py" \
-  --token "$TOKEN" --imei <IMEI> --owner-company "<目标生产企业>" \
+  --token "$TOKEN" --imei <IMEI> --owner-company "<目标归属企业>" \
   [--company "<农机企业>"] [--model "<农机型号>"] --yes
 ```
 
@@ -81,7 +90,7 @@ python "E:/Dev/jianglei/skills/dt-cabin-modify/scripts/run_flow.py" \
 
 | 顺序 | 脚本 | 动作 |
 |---|---|---|
-| 1 | `update_sale_info.py` | 更新生产企业 + 时间字段（sellTime/sendTime/commServiceBeginDate=今天00:00:00，commServiceEndDate=3年后00:00:00）。决策：查到且 ownerCompany≠目标 → 更新；未查到 → 也更新；企业不存在 → 中止 |
+| 1 | `update_sale_info.py` | 更新归属企业 + 时间字段（sellTime/sendTime/commServiceBeginDate=今天00:00:00，commServiceEndDate=3年后00:00:00）。决策：查到且 ownerCompany≠目标 → 更新；未查到 → 也更新；企业不存在 → 中止 |
 | 2 | `install_iot_insert.py` | 写入①：安装信息（body 示例 + 替换 imei） |
 | 3 | `install_iot_machine_insert.py` | 写入②：农机信息（dbx 查 company/model，随机 6 位字母数字+000000 的 factoryNumber，productionDate=今天） |
 | 4 | `install_iot_owner_insert.py` | 写入③：机主信息（body 示例 + 替换 imei） |
@@ -103,7 +112,7 @@ python "E:/Dev/jianglei/skills/dt-cabin-modify/scripts/run_flow.py" \
 | `get_token.py` | 登录拿 token | 只读 |
 | `query_by_imei.py` | 查设备信息 | 只读 |
 | `preview.py` | 预查询全部数据并展示 | 只读 |
-| `update_sale_info.py` | 更新生产企业/时间 | 写入 |
+| `update_sale_info.py` | 更新归属企业/时间 | 写入 |
 | `handle_install.py` | 查安装记录，有则删 | 有条件写入 |
 | `install_iot_insert.py` | 写入① | 写入 |
 | `install_iot_machine_insert.py` | 写入② | 写入 |

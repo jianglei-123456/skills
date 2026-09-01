@@ -38,7 +38,7 @@ A collection of reusable, **agent-agnostic skills** for AI coding agents. Each s
 
 - **Trigger:** NONE — this skill must NOT fire on natural language. The user must explicitly invoke it (e.g. `/dt-cabin-modify`) before any of its scripts run.
 - **Action:** read `dt-cabin-modify/SKILL.md` and follow its flow: confirm inputs (IMEI, target owner company) → `get_token.py` → `preview.py` (show all dbx lookups to the user, await confirmation) → `run_flow.py --yes` (update sale info, conditional install delete, three install inserts, 5s delay + updateUserInfo).
-- **Gate:** only run when the user explicitly asks for this skill; never auto-trigger on mentions of 座舱/生产企业/IMEI changes.
+- **Gate:** only run when the user explicitly asks for this skill; never auto-trigger on mentions of 座舱/归属企业/IMEI changes.
 
 ## General rule for consuming skills
 
