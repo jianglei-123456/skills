@@ -21,4 +21,4 @@ Connections are created in DBX Desktop. Agents only use connection names that al
 
 ## What agents run (read-only by default)
 
-See [SKILL.md](SKILL.md) for the quick reference; full command syntax lives in [references/commands.md](references/commands.md): `doctor`, `capabilities`, `connections list`, `schema list`, `schema describe`, `query`, `context`, `open`. Writes require explicit opt-in flags (`--allow-writes`, `--allow-dangerous-sql`).
+See [SKILL.md](SKILL.md) for the quick reference; full command syntax lives in [references/commands.md](references/commands.md): `doctor`, `capabilities`, `connections list`, `schema list`, `schema describe`, `query`, `context`, `dbml`, `docs`, `open`. JSON field names and both error envelopes (JSON `error` object vs stderr `Error [CODE]: message`) are documented in [references/outputs.md](references/outputs.md). Writes require explicit opt-in flags (`--allow-writes`, `--allow-dangerous-sql`).
