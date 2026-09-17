@@ -10,7 +10,10 @@ Each skill is a self-contained directory with a `SKILL.md` that tells the agent 
 |---|---|---|
 | [codegraph](codegraph/) | Explore a codebase through its prebuilt code-intelligence graph: symbol search, source with call paths, change-impact analysis, affected tests — no grep/read loops. | `codegraph` CLI + a `.codegraph/` index in the target project |
 | [codebuddy会话总结](codebuddy-session-summary/) | Summarize past CodeBuddy coding sessions: extract AI titles and first user messages from `~/.codebuddy/projects/*/*.jsonl`, group by day. | Python 3 |
+| [dbx](dbx/) | Database access through the `dbx` CLI: run SQL queries, inspect tables and schemas, list connections, generate schema docs. Read-only by default. | `dbx` CLI + a connection configured in DBX Desktop |
 | [dt-cabin-modify](dt-cabin-modify/) | Modify a device's owner company on the DT platform and rebuild install/machine/owner records. Explicit invocation only — never auto-triggers. Includes env checks (dbx CLI, credentials via env vars, dbx connection). | Python 3, `dbx` CLI, `DT_USERNAME`/`DT_PASSWORD` env vars |
+| [explain-logic](explain-logic/) | Explain one named piece of business logic end to end: traces only that chain's own upstream/downstream edges, then presents it as prose plus code and diagrams. Confirms its scope sketch with you before explaining. Explicit invocation only — never auto-triggers. | Nothing (optional: `codegraph` CLI + a `.codegraph/` index) |
+| [topic-note](topic-note/) | Research a topic and write it up as a **single** Markdown document — a report, study note, or overview. | A background research agent |
 
 ## Quick start
 

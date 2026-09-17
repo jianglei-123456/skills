@@ -40,6 +40,12 @@ A collection of reusable, **agent-agnostic skills** for AI coding agents. Each s
 - **Action:** read `dt-cabin-modify/SKILL.md` and follow its flow: confirm inputs (IMEI, target owner company) → `get_token.py` → `preview.py` (show all dbx lookups to the user, await confirmation) → `run_flow.py --yes` (update sale info, conditional install delete, three install inserts, 5s delay + updateUserInfo).
 - **Gate:** only run when the user explicitly asks for this skill; never auto-trigger on mentions of 座舱/归属企业/IMEI changes.
 
+## The explain-logic skill — explicit invocation only
+
+- **Trigger:** NONE — this skill must NOT fire on natural language. The user explicitly invokes `/explain-logic <target>` before it runs.
+- **Action:** read `explain-logic/SKILL.md` and follow it: scope sketch → wait for the user's confirmation → five-layer explanation. It explains exactly one named business chain, never the whole repository.
+- **Gate:** never run `codegraph init` / `index` / `sync`; indexing is the user's decision. If the project has no `.codegraph/` index, read files directly instead.
+
 ## General rule for consuming skills
 
 Always honor a skill's gate conditions: a skill that requires a precondition (like an existing `.codegraph/` directory) must not be force-used, and must not trigger the precondition itself.
