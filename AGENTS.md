@@ -40,6 +40,12 @@ A collection of reusable, **agent-agnostic skills** for AI coding agents. Each s
 - **Action:** read `dt-cabin-modify/SKILL.md` and follow its flow: confirm inputs (IMEI, target owner company) → `get_token.py` → `preview.py` (show all dbx lookups to the user, await confirmation) → `run_flow.py --yes` (update sale info, conditional install delete, three install inserts, 5s delay + updateUserInfo).
 - **Gate:** only run when the user explicitly asks for this skill; never auto-trigger on mentions of 座舱/归属企业/IMEI changes.
 
+## The ysb-data-export skill — explicit invocation only
+
+- **Trigger:** NONE — this skill must NOT fire on natural language. The user must explicitly invoke it (e.g. `/ysb-data-export`) before any of its scripts run.
+- **Action:** read `ysb-data-export/SKILL.md` and follow its flow: resolve the export scope (company name/id and/or owner region `--owner-province`/`--owner-city`/`--owner-county` and/or terminal types `--terminal-types`; at least one required) → interactive field selection (`--list-fields`, then `--fields` / `--exclude` / `--no-photos` / `--no-idcard`) → `--preview` (show summary + 5-row sample, await user confirmation) → rerun the same parameters with `--yes` to write the xlsx. Install mode is the default; `--with-work` exports install+work rows (one row per device × work day) and requires a date range.
+- **Gate:** explicit invocation only; never auto-trigger on mentions of 安装数据/作业数据/导出. All DB access is read-only (`dbx query` against `prod_192.168.5.17_machine`); the only write is the resulting local xlsx.
+
 ## The explain-logic skill — explicit invocation only
 
 - **Trigger:** NONE — this skill must NOT fire on natural language. The user explicitly invokes `/explain-logic <target>` before it runs.

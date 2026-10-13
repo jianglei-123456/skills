@@ -1,0 +1,68 @@
+{
+  "connection": "prod_192.168.5.17_machine",
+  "modes": {
+    "install": { "sheet": "安装数据", "file_prefix": "安装数据" },
+    "work": { "sheet": "作业数据", "file_prefix": "作业数据" }
+  },
+  "groups": [
+    { "key": "base", "name": "基础信息" },
+    { "key": "owner", "name": "机主" },
+    { "key": "driver", "name": "机手" },
+    { "key": "machine", "name": "农机" },
+    { "key": "implement", "name": "机具" },
+    { "key": "other", "name": "其他" },
+    { "key": "photo", "name": "照片" },
+    { "key": "work", "name": "作业" }
+  ],
+  "fields": [
+    { "key": "imei", "header": "终端编号", "group": "base", "mode": "install", "default": true, "sql": "ii.imei" },
+    { "key": "terminal_type", "header": "终端类型", "group": "base", "mode": "install", "default": true, "sql": "COALESCE(ic.name, CASE ii.terminal_type WHEN 'A1' THEN '北斗定位终端' WHEN 'A2' THEN '北斗工况终端' WHEN 'A3' THEN '作业监测终端' WHEN 'A4' THEN '辅助驾驶终端' WHEN 'A6' THEN '辅助驾驶终端' WHEN 'AA' THEN '北斗定位终端' ELSE '' END)" },
+    { "key": "ccid", "header": "通讯卡号", "group": "base", "mode": "install", "default": true, "sql": "i.ccid" },
+    { "key": "sim_card", "header": "SIM卡号", "group": "base", "mode": "install", "default": false, "sql": "i.sim" },
+    { "key": "sim_end_date", "header": "SIM到期时间", "group": "base", "mode": "install", "default": false, "sql": "i.comm_service_end_date" },
+    { "key": "install_time", "header": "安装时间", "group": "base", "mode": "install", "default": true, "sql": "to_char(ii.create_time,'YYYY-MM-DD')" },
+    { "key": "installer", "header": "安装人", "group": "base", "mode": "install", "default": true, "sql": "ii.user_name" },
+    { "key": "company_name", "header": "设备归属", "group": "base", "mode": "install", "default": true, "sql": "c2.name" },
+
+    { "key": "owner_name", "header": "机主", "group": "owner", "mode": "install", "default": true, "sql": "c.name" },
+    { "key": "owner_credit_code", "header": "统一社会信用代码", "group": "owner", "mode": "install", "default": true, "sql": "c.credit_code" },
+    { "key": "owner_legal", "header": "法人", "group": "owner", "mode": "install", "default": true, "sql": "c.legal_person" },
+    { "key": "owner_mobile", "header": "机主电话", "group": "owner", "mode": "install", "default": true, "sql": "c.mobile" },
+    { "key": "owner_province", "header": "省", "group": "owner", "mode": "install", "default": true, "sql": "c.province" },
+    { "key": "owner_city", "header": "市", "group": "owner", "mode": "install", "default": true, "sql": "c.city" },
+    { "key": "owner_county", "header": "区县", "group": "owner", "mode": "install", "default": true, "sql": "c.county" },
+    { "key": "owner_address", "header": "地址", "group": "owner", "mode": "install", "default": true, "sql": "c.address" },
+
+    { "key": "driver_name", "header": "机手", "group": "driver", "mode": "install", "default": true, "sql": "iim.fullname" },
+    { "key": "driver_mobile", "header": "机手电话", "group": "driver", "mode": "install", "default": true, "sql": "iim.mobile" },
+    { "key": "driver_card", "header": "机手身份证号", "group": "driver", "mode": "install", "default": true, "sql": "iim.card" },
+
+    { "key": "machine_category", "header": "农机品目", "group": "machine", "mode": "install", "default": true, "sql": "mc.name" },
+    { "key": "machine_company", "header": "农机生产厂商", "group": "machine", "mode": "install", "default": true, "sql": "iim.company" },
+    { "key": "machine_model", "header": "农机型号", "group": "machine", "mode": "install", "default": true, "sql": "iim.model" },
+    { "key": "car_number", "header": "车牌号", "group": "machine", "mode": "install", "default": true, "sql": "iim.car_number" },
+    { "key": "engine_number", "header": "发动机编号", "group": "machine", "mode": "install", "default": true, "sql": "iim.engine_number" },
+    { "key": "factory_number", "header": "农机出厂编号", "group": "machine", "mode": "install", "default": true, "sql": "iim.factory_number" },
+    { "key": "production_date", "header": "农机出厂日期", "group": "machine", "mode": "install", "default": true, "sql": "to_char(iim.production_date,'YYYY-MM-DD')" },
+
+    { "key": "implement_imei", "header": "机具识别器", "group": "implement", "mode": "install", "default": true, "sql": "impl.impl_imeis" },
+    { "key": "implement_category", "header": "机具品目", "group": "implement", "mode": "install", "default": true, "sql": "impl.impl_cats" },
+    { "key": "work_type_name", "header": "作业类型", "group": "implement", "mode": "install", "default": true, "sql": "CASE WHEN impl.cnt > 0 THEN impl.impl_wts ELSE (SELECT w.name FROM basic.category_crop_work_type cc JOIN basic.work_type w ON cc.work_type_id2 = w.id WHERE cc.category_id3 = iim.category_id3 ORDER BY w.id LIMIT 1) END" },
+    { "key": "implement_width", "header": "机具幅宽", "group": "implement", "mode": "install", "default": false, "sql": "CASE WHEN impl.cnt > 0 THEN impl.impl_widths ELSE dw.content END" },
+
+    { "key": "one_machine", "header": "机型", "group": "other", "mode": "install", "default": true, "sql": "CASE WHEN ii.one_machine = 0 THEN '分体机' WHEN ii.one_machine = 1 THEN '一体机' ELSE '' END" },
+
+    { "key": "photo_device", "header": "设备照片", "group": "photo", "mode": "install", "default": true, "sql": "ii.thumb" },
+    { "key": "photo_install", "header": "设备安装位置照片", "group": "photo", "mode": "install", "default": true, "sql": "ii.install_position_thumb" },
+    { "key": "photo_machine", "header": "农机正面照片", "group": "photo", "mode": "install", "default": true, "sql": "iim.machine_thumb" },
+    { "key": "photo_nameplate", "header": "农机铭牌照片", "group": "photo", "mode": "install", "default": true, "sql": "iim.nameplate_thumb" },
+
+    { "key": "run_day", "header": "作业日期", "group": "work", "mode": "work", "default": true, "sql": "sid.run_day" },
+    { "key": "area", "header": "作业面积", "group": "work", "mode": "work", "default": true, "numeric": true, "sql": "sid.area" },
+    { "key": "work_province", "header": "作业省", "group": "work", "mode": "work", "default": true, "sql": "sid.province" },
+    { "key": "work_city", "header": "作业市", "group": "work", "mode": "work", "default": true, "sql": "sid.city" },
+    { "key": "work_county", "header": "作业区县", "group": "work", "mode": "work", "default": true, "sql": "sid.county" },
+    { "key": "work_town", "header": "作业乡镇", "group": "work", "mode": "work", "default": false, "sql": "sid.town" },
+    { "key": "work_address", "header": "作业地址", "group": "work", "mode": "work", "default": true, "sql": "sid.address" }
+  ]
+}
