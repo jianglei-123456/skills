@@ -5,11 +5,14 @@
   python export_data.py --check                     # 环境检查
   python export_data.py --list-fields               # 查看字段注册表（分组）
   python export_data.py --company 1514669 --preview # 预览（不写文件）
-  python export_data.py --company "某某公司" --with-work \
+  python export_data.py --imeis "YS0285093740549,YS1234567890" --preview
+  python export_data.py --company "某某归属企业" --with-work \
       --since 2025-10-01 --until 2025-10-07 [--fields 键1,键2] [--exclude 键3] \
       [--no-photos] [--no-idcard] [--area-only] [--out-dir DIR] --yes
 
 说明：
+- 范围至少给一种：--company（归属企业：名称或 id）/ --imeis（直接指定 IMEI 列表）/
+  --owner-province|--owner-city|--owner-county / --terminal-types。
 - 依赖 dbx CLI（连接 prod_192.168.5.17_machine）、Python 3、openpyxl。
 - dbx query 默认静默截断 10000 行：本脚本始终显式传 --limit 并校验 row_count。
 - 作业模式先按时间窗统计行数，超过单片阈值自动细分（月/周/日）分批查询后合并。
@@ -172,17 +175,22 @@ def split_tokens(raw):
 
 
 # ---------------------------------------------------------------------------
-# 公司解析
+# 归属企业解析
 # ---------------------------------------------------------------------------
 
 def resolve_company_token(token):
-    """解析一个公司标识（名称或 id）。返回 dict 列表；空列表=未找到。"""
+    """解析一个归属企业标识（名称或 id）。返回 dict 列表；空列表=未找到。
+
+    纯数字 id 即使 basic.company 中无记录也直接返回（按 id 过滤，name=None）。
+    """
     t = token.strip()
     if not t:
         return []
     if t.isdigit():
         rows, _ = dbx_rows(f"select id, name from basic.company where id = {int(t)}", limit=10)
-        return [{"id": r["id"], "name": r["name"]} for r in rows]
+        if rows:
+            return [{"id": r["id"], "name": r["name"]} for r in rows]
+        return [{"id": int(t), "name": None}]
     esc = t.replace("'", "''")
     rows, _ = dbx_rows(
         f"select id, name from basic.company where name = '{esc}'", limit=50)
@@ -193,15 +201,15 @@ def resolve_company_token(token):
 
 
 def resolve_companies(tokens):
-    """解析全部公司标识；歧义时报候选清单并 exit 2。返回去重后的公司列表。"""
+    """解析全部归属企业标识；歧义时报候选清单并 exit 2。返回去重后的企业列表。"""
     resolved = []
     seen = set()
     for token in tokens:
         matches = resolve_company_token(token)
         if not matches:
-            raise SystemExit(f"[ERROR] 公司「{token}」在 basic.company 中未找到。")
+            raise SystemExit(f"[ERROR] 归属企业「{token}」在 basic.company 中未找到。")
         if len(matches) > 1:
-            print(f"[ERROR] 公司「{token}」匹配到 {len(matches)} 条，请改用公司 id 重试：")
+            print(f"[ERROR] 归属企业「{token}」匹配到 {len(matches)} 条，请改用企业 id 重试：")
             for m in matches:
                 print(f"  id={m['id']}  {m['name']}")
             raise SystemExit(2)
@@ -210,6 +218,35 @@ def resolve_companies(tokens):
             seen.add(m["id"])
             resolved.append(m)
     return resolved
+
+
+# ---------------------------------------------------------------------------
+# IMEI 列表解析
+# ---------------------------------------------------------------------------
+
+IMEI_RE = re.compile(r"[0-9A-Za-z_-]+")
+
+
+def parse_imeis(raw_list):
+    """解析 --imeis 参数（可多次传入；逗号/中文逗号/空白分隔）。返回去重后的 IMEI 列表。"""
+    seen, out = set(), []
+    for raw in raw_list or []:
+        for tok in re.split(r"[,，\s]+", raw or ""):
+            t = tok.strip()
+            if not t:
+                continue
+            if not IMEI_RE.fullmatch(t):
+                raise SystemExit(f"[ERROR] --imeis 含非法字符：{t}（仅允许字母/数字/下划线/短横线）")
+            if t not in seen:
+                seen.add(t)
+                out.append(t)
+    return out
+
+
+def imei_cond(imeis):
+    if not imeis:
+        return ""
+    return "ii.imei in (" + ",".join("'" + v + "'" for v in imeis) + ")"
 
 
 # ---------------------------------------------------------------------------
@@ -410,6 +447,20 @@ def fetch_sample(fields, with_work, ids, scope, extra_conds, n=5):
     return rows_to_records(resp.get("rows") or [], resp.get("columns") or [], fields)
 
 
+def fetch_imei_hits(ids, scope, extra_conds, limit):
+    """返回导出同口径下命中的 IMEI 集合（设备级，不含日期条件）。
+
+    extra_conds 应已包含 imei_cond(imeis)。
+    """
+    conds = ["ii.status = 10", "ii.is_deleted = 0", "ii.is_has_owner = 1",
+             company_cond(ids, scope)]
+    conds += [c for c in extra_conds if c]
+    conds = [c for c in conds if c]
+    sql = "select distinct ii.imei as imei " + FROM_BLOCK + " where " + " and ".join(conds)
+    rows, _ = dbx_rows(sql, limit=limit)
+    return {list(r.values())[0] for r in rows}
+
+
 # ---------------------------------------------------------------------------
 # 输出
 # ---------------------------------------------------------------------------
@@ -467,13 +518,16 @@ def safe_filename(name):
     return re.sub(r'[\\/:*?"<>|\s]+', "_", name).strip("_") or "未知公司"
 
 
-def output_path(out_dir, registry, mode, companies, region_text, type_ids):
+def output_path(out_dir, registry, mode, companies, region_text, type_ids, imeis):
     os.makedirs(out_dir, exist_ok=True)
     prefix = registry["modes"][mode]["file_prefix"]
     ts = time.strftime("%Y%m%d_%H%M%S")
     parts = []
     if len(companies) == 1:
-        parts.append(safe_filename(companies[0]["name"]))
+        c = companies[0]
+        parts.append(safe_filename(c["name"] or f"id={c['id']}"))
+    if imeis:
+        parts.append(f"IMEI{len(imeis)}个")
     if region_text:
         parts.append(safe_filename(region_text))
     if type_ids:
@@ -568,14 +622,20 @@ def parse_date(text, opt):
 
 
 def cmd_export(args, registry):
-    # 公司解析（可选）
+    # 归属企业解析（可选）
     tokens = list(split_tokens(",".join(args.company or [])))
     companies = resolve_companies(tokens) if tokens else []
     ids = [c["id"] for c in companies]
     if companies:
-        print("[公司]")
+        print("[归属企业]")
         for c in companies:
-            print(f"  - {c['name']} (id={c['id']})")
+            if c["name"]:
+                print(f"  - {c['name']} (id={c['id']})")
+            else:
+                print(f"  - id={c['id']}（basic.company 中无此 id，直接按 id 过滤）")
+
+    # IMEI 列表（可选）
+    imeis = parse_imeis(args.imeis)
 
     # 机主地区 / 终端类型过滤（可选）
     def like_prefix(col, value):
@@ -599,10 +659,15 @@ def cmd_export(args, registry):
             except ValueError:
                 raise SystemExit(f"[ERROR] --terminal-types 需为数字 id（如 348,363）：{tok}")
         base_filters.append("ii.type_id3 in (" + ",".join(str(t) for t in type_ids) + ")")
-    if not companies and not base_filters:
-        raise SystemExit("[ERROR] 至少提供一种过滤：--company / --owner-province / "
-                         "--owner-city / --owner-county / --terminal-types。")
+    if imeis:
+        base_filters.append(imei_cond(imeis))
+    if not companies and not imeis and not base_filters:
+        raise SystemExit("[ERROR] 至少提供一种过滤：--company（归属企业名称或 id）/ --imeis / "
+                         "--owner-province / --owner-city / --owner-county / --terminal-types。")
     desc = []
+    if imeis:
+        head = "、".join(imeis[:5]) + ("…" if len(imeis) > 5 else "")
+        desc.append(f"IMEI {len(imeis)} 个（{head}）")
     if region_text:
         desc.append("机主地区：" + region_text)
     if type_ids:
@@ -658,14 +723,24 @@ def cmd_export(args, registry):
     else:
         print("[日期] 不限（按安装时间 create_time）")
     if companies:
-        print(f"[归属] 按 {'company_id / install_distributor / distributor 任一匹配' if scope == 'any' else 'company_id'}")
+        scope_txt = ("归属企业 company_id 或经销商字段任一匹配" if scope == "any"
+                     else "归属企业 company_id")
+        print(f"[归属] 按{scope_txt}")
+    if imeis:
+        hits = fetch_imei_hits(ids, scope, base_filters, len(imeis) + 1000)
+        miss = [v for v in imeis if v not in hits]
+        line = f"[IMEI] 输入 {len(imeis)} 个，口径内命中 {len(imeis) - len(miss)} 个"
+        if miss:
+            head = "、".join(miss[:20]) + ("…" if len(miss) > 20 else "")
+            line += f"；未命中 {len(miss)} 个：{head}"
+        print(line)
     print(f"[字段] 共 {len(fields)} 列：" + "、".join(f["header"] for f in fields))
     if with_work:
         print(f"[预估] {total_rows} 行（设备约 {device_count} 台，设备×作业日）；"
               f"查询分 {len(chunks)} 片")
     else:
         print(f"[预估] {total_rows} 行（设备 {device_count} 台）；查询分 {len(chunks)} 片")
-    path = output_path(args.out_dir, registry, mode, companies, region_text, type_ids)
+    path = output_path(args.out_dir, registry, mode, companies, region_text, type_ids, imeis)
     print(f"[输出] {path}")
 
     if total_rows == 0:
@@ -700,11 +775,13 @@ def cmd_export(args, registry):
     start = time.time()
     recs = []
     for idx, (s, e, n) in enumerate(chunks, 1):
+        # 分片查询必须带上 base_filters（归属企业以外的 IMEI/地区/类型过滤），
+        # 否则实际导出的行集会与统计/预览不一致。
         if with_work:
-            conds = area_cond + [work_date_cond(s, e)]
+            conds = base_filters + area_cond + [work_date_cond(s, e)]
             label = f"{s.isoformat()} ~ {e.isoformat()}"
         else:
-            conds = [install_date_cond(s, e)] if s else base_conds
+            conds = (base_filters + [install_date_cond(s, e)]) if s else base_conds
             label = f"{s.isoformat()} ~ {e.isoformat()}" if s else "全量"
         print(f"[{idx}/{len(chunks)}] {label}：预计 {n} 行，查询中 ...")
         recs.extend(fetch_chunk(fields, with_work, ids, scope,
@@ -729,7 +806,11 @@ def main():
     parser.add_argument("--check", action="store_true", help="环境检查")
     parser.add_argument("--list-fields", action="store_true", help="查看字段注册表")
     parser.add_argument("--company", action="append", default=[],
-                        help="公司名称或 id；可多次/逗号分隔（与地区/类型过滤至少给一个）")
+                        help="归属企业（设备 company_id）：名称或 id；可多次/逗号分隔"
+                             "（与 IMEI/地区/类型过滤至少给一个）")
+    parser.add_argument("--imeis", action="append", default=[],
+                        help="直接指定 IMEI 列表；逗号/空白分隔，可多次"
+                             "（与公司/地区/类型过滤至少给一个）")
     parser.add_argument("--owner-province", help="机主省过滤（前缀匹配，如 江苏）")
     parser.add_argument("--owner-city", help="机主市过滤（前缀匹配，如 南京）")
     parser.add_argument("--owner-county", help="机主区县过滤（前缀匹配，如 高淳）")
@@ -738,7 +819,7 @@ def main():
     parser.add_argument("--since", help="起始日期 YYYY-MM-DD")
     parser.add_argument("--until", help="结束日期 YYYY-MM-DD（含当天）")
     parser.add_argument("--scope", choices=["company", "any"], default="company",
-                        help="归属过滤：company=仅 company_id；any=并入经销商字段")
+                        help="归属过滤：company=仅归属企业 company_id；any=并入经销商字段")
     parser.add_argument("--fields", help="精确选择的字段（键或中文表头，逗号分隔）")
     parser.add_argument("--exclude", help="排除的字段（键或中文表头，逗号分隔）")
     parser.add_argument("--no-photos", action="store_true", help="排除全部照片列")
