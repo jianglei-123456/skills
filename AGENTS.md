@@ -40,6 +40,11 @@ A collection of reusable, **agent-agnostic skills** for AI coding agents. Each s
 - **Action:** read `dt-cabin-modify/SKILL.md` and follow its flow: confirm inputs (IMEI, target owner company) → `get_token.py` → `preview.py` (show all dbx lookups to the user, await confirmation) → `run_flow.py --yes` (update sale info, conditional install delete, three install inserts, 5s delay + updateUserInfo).
 - **Gate:** only run when the user explicitly asks for this skill; never auto-trigger on mentions of 座舱/归属企业/IMEI changes.
 
+## The dt-sale-update skill — explicit invocation only
+
+- **Trigger:** NONE — this skill must NOT fire on natural language. The user must explicitly invoke it (e.g. `/dt-sale-update`) before any of its scripts run.
+- **Action:** read `dt-sale-update/SKILL.md` and follow its flow: confirm inputs (IMEI list, SKU, owner company — a partial name is fine, `--date` optional defaulting to today) → `get_token.py` → `preview.py` (product by SKU, company full name/id, current device values, final JSON; await confirmation) → `update_sale.py --yes` (sequential `updateSaleInformation`, stops at the first failure, prints updated/failed/skipped).
+- **Gate:** explicit invocation only; never auto-trigger on mentions of 销售信息/销售时间/服务期. DB access is read-only (`dbx query` against `prod_192.168.5.129_dss_owner` for `contract.product` and `prod_192.168.5.17_machine` for `basic.company`); the only external write is the DT update API.
 ## The ysb-data-export skill — explicit invocation only
 
 - **Trigger:** NONE — this skill must NOT fire on natural language. The user must explicitly invoke it (e.g. `/ysb-data-export`) before any of its scripts run.
