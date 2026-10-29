@@ -43,6 +43,7 @@ dt-iot-import/
 ## 注意
 
 - **整文件校验**：任意一行有错 → 全部拒绝、不入库；同批 imei 重导是覆盖更新
+- mapping 只有 `imei` 必填，其余字段按 Excel 实际列选填（未映射的字段不导入）
 - 数据行上限 5000；`source` 必须显式传（HD/XX/LS/BD 或空串），服务端对 null 会 NPE
 - 若单元格为公式且无缓存值，`inspect_excel.py` 可能读为空——请在 Excel 另存为值后重试
 - 失败时完整明细写入 `<Excel同目录>/<文件名>_failDetail.json`

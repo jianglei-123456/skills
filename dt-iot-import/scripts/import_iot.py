@@ -30,8 +30,11 @@ IMPORT_URL = "https://dss.datian360.com/prod_api/schedule/job/externalIotImport/
 TIMEOUT = 600          # 请求超时（秒）；服务端逐行校验+翻译，行多时耗时较长
 FAIL_PREVIEW = 50      # stdout 上展示的失败明细条数上限
 
+# 服务端只强制校验 imei 的字段映射，其余字段是否映射由 Excel 实际提供的列决定
 REQUIRED_FIELDS = {
     "imei": "机具编号",
+}
+OPTIONAL_FIELDS = {
     "factory": "终端生产厂家",
     "customerName": "服务主体",
     "company": "农机生产厂家",
@@ -39,8 +42,6 @@ REQUIRED_FIELDS = {
     "saleProvince": "销售省",
     "saleCity": "销售市",
     "saleCounty": "销售县",
-}
-OPTIONAL_FIELDS = {
     "factoryNumber": "出厂编号",
     "model": "型号",
     "engineNumber": "发动机编号",
