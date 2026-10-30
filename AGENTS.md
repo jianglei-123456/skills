@@ -45,6 +45,12 @@ A collection of reusable, **agent-agnostic skills** for AI coding agents. Each s
 - **Trigger:** NONE — this skill must NOT fire on natural language. The user must explicitly invoke it (e.g. `/dt-sale-update`) before any of its scripts run.
 - **Action:** read `dt-sale-update/SKILL.md` and follow its flow: confirm inputs (IMEI list, SKU, owner company — a partial name is fine, `--date` optional defaulting to today) → `get_token.py` → `preview.py` (product by SKU, company full name/id, current device values, final JSON; await confirmation) → `update_sale.py --yes` (sequential `updateSaleInformation`, stops at the first failure, prints updated/failed/skipped).
 - **Gate:** explicit invocation only; never auto-trigger on mentions of 销售信息/销售时间/服务期. DB access is read-only (`dbx query` against `prod_192.168.5.129_dss_owner` for `contract.product` and `prod_192.168.5.17_machine` for `basic.company`); the only external write is the DT update API.
+## The dt-owner-modify skill — explicit invocation only
+
+- **Trigger:** NONE — this skill must NOT fire on natural language. The user must explicitly invoke it (e.g. `/dt-owner-modify`) before any of its scripts run.
+- **Action:** read `dt-owner-modify/SKILL.md` and follow its flow: confirm inputs (IMEI list, new owner as `ysb.customer` id or name) → `check_env.py` → `preview.py` (resolve the owner, show each IMEI's current owner and the exact UPDATE, await user confirmation) → `get_token.py` → `update_owner.py --yes` (single UPDATE of `customer_id`, read-back verification, then one `pushData` sync call per IMEI).
+- **Gate:** explicit invocation only; never auto-trigger on mentions of 机主/customer_id. DB access is read-only until `--yes` plus `--allow-writes`; the only writes are `ysb.install_iot_owner.customer_id`/`update_time` and the DSS sync call.
+
 ## The ysb-data-export skill — explicit invocation only
 
 - **Trigger:** NONE — this skill must NOT fire on natural language. The user must explicitly invoke it (e.g. `/ysb-data-export`) before any of its scripts run.
