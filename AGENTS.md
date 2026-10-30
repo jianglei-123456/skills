@@ -48,8 +48,8 @@ A collection of reusable, **agent-agnostic skills** for AI coding agents. Each s
 ## The dt-owner-modify skill — explicit invocation only
 
 - **Trigger:** NONE — this skill must NOT fire on natural language. The user must explicitly invoke it (e.g. `/dt-owner-modify`) before any of its scripts run.
-- **Action:** read `dt-owner-modify/SKILL.md` and follow its flow: confirm inputs (IMEI list, new owner as `ysb.customer` id or name) → `check_env.py` → `preview.py` (resolve the owner, show each IMEI's current owner and the exact UPDATE, await user confirmation) → `get_token.py` → `update_owner.py --yes` (single UPDATE of `customer_id`, read-back verification, then one `pushData` sync call per IMEI).
-- **Gate:** explicit invocation only; never auto-trigger on mentions of 机主/customer_id. DB access is read-only until `--yes` plus `--allow-writes`; the only writes are `ysb.install_iot_owner.customer_id`/`update_time` and the DSS sync call.
+- **Action:** read `dt-owner-modify/SKILL.md` and follow its flow: confirm inputs (IMEI list, new owner as `ysb.customer` id or name, optional new distributor from `basic.company`) → `check_env.py` → `preview.py` (resolve owner/distributor, show each IMEI's current owner plus the distributor fields still to change, print both SQL statements, await user confirmation) → `get_token.py` → `update_owner.py --yes` (one multi-table statement on the machine db, then `contract.iot` on the dss db, read-back verification, then one `pushData` sync call per IMEI).
+- **Gate:** explicit invocation only; never auto-trigger on mentions of 机主/经销商/customer_id. DB access is read-only until `--yes` plus `--allow-writes`; writes are limited to `install_iot_owner.customer_id/distributor_id`, `install_iot.company_id/install_distributor_company_id`, `install_iot_machine.distributor_id`, `public.iot.owner_company_id/owner_company`, `contract.iot.owner_company_id/owner_company`, and the DSS sync call.
 
 ## The ysb-data-export skill — explicit invocation only
 
