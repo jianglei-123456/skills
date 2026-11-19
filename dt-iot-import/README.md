@@ -44,6 +44,7 @@ dt-iot-import/
 
 - **整文件校验**：任意一行有错 → 全部拒绝、不入库；同批 imei 重导是覆盖更新
 - mapping 只有 `imei` 必填，其余字段按 Excel 实际列选填（未映射的字段不导入）
+- **字典映射**：服务端导入时读 dss 库 `qingdao_iot_dict`（key→name，约 218 条），对农机生产厂家/品目做别名翻译；Excel 用品牌简称（如 东方红、MK2404）时需确认字典已配置映射
 - 数据行上限 5000；`source` 必须显式传（HD/XX/LS/BD 或空串），服务端对 null 会 NPE
 - 若单元格为公式且无缓存值，`inspect_excel.py` 可能读为空——请在 Excel 另存为值后重试
 - 失败时完整明细写入 `<Excel同目录>/<文件名>_failDetail.json`

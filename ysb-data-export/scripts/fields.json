@@ -22,7 +22,7 @@
     { "key": "sim_end_date", "header": "SIM到期时间", "group": "base", "mode": "install", "default": false, "sql": "i.comm_service_end_date" },
     { "key": "install_time", "header": "安装时间", "group": "base", "mode": "install", "default": true, "sql": "to_char(ii.create_time,'YYYY-MM-DD')" },
     { "key": "installer", "header": "安装人", "group": "base", "mode": "install", "default": true, "sql": "ii.user_name" },
-    { "key": "company_name", "header": "设备归属", "group": "base", "mode": "install", "default": true, "sql": "c2.name" },
+    { "key": "company_name", "header": "归属企业", "group": "base", "mode": "install", "default": true, "sql": "c2.name" },
 
     { "key": "owner_name", "header": "机主", "group": "owner", "mode": "install", "default": true, "sql": "c.name" },
     { "key": "owner_credit_code", "header": "统一社会信用代码", "group": "owner", "mode": "install", "default": true, "sql": "c.credit_code" },
@@ -37,6 +37,8 @@
     { "key": "driver_mobile", "header": "机手电话", "group": "driver", "mode": "install", "default": true, "sql": "iim.mobile" },
     { "key": "driver_card", "header": "机手身份证号", "group": "driver", "mode": "install", "default": true, "sql": "iim.card" },
 
+    { "key": "machine_lv1", "header": "农机大类", "group": "machine", "mode": "install", "default": false, "sql": "(select cb.name from basic.category cc join basic.category cb on cb.id = cc.parent_id where cc.id = mc.parent_id)" },
+    { "key": "machine_lv2", "header": "农机小类", "group": "machine", "mode": "install", "default": false, "sql": "(select cc.name from basic.category cc where cc.id = mc.parent_id)" },
     { "key": "machine_category", "header": "农机品目", "group": "machine", "mode": "install", "default": true, "sql": "mc.name" },
     { "key": "machine_company", "header": "农机生产厂商", "group": "machine", "mode": "install", "default": true, "sql": "iim.company" },
     { "key": "machine_model", "header": "农机型号", "group": "machine", "mode": "install", "default": true, "sql": "iim.model" },
