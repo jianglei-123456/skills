@@ -1,12 +1,14 @@
 ---
 name: dt-owner-modify
-description: "大田修改机主/经销商：给一批 IMEI 与目标机主（可再加目标经销商），在 machine 库核对机主与客户，改 install_iot_owner.customer_id/distributor_id、install_iot.company_id/install_distributor_company_id、install_iot_machine.distributor_id、public.iot.owner_company_id/owner_company（dss contract.iot 同步 ownerCompany），再逐台调用 DSS 同步接口（pushData，同 push_ysb）。必须先在 preview 里确认，再加 --yes 执行。NOT auto-triggered by natural language — invoke this skill explicitly (e.g. /dt-owner-modify) before running any of its scripts."
+description: "大田修改机主/经销商：给一批 IMEI 与目标机主（可再加目标经销商），在 machine 库核对机主与客户，改 install_iot_owner.customer_id/distributor_id、install_iot.company_id/install_distributor_company_id、install_iot_machine.distributor_id，以及归属企业 machine.iot.owner_company_id/owner_company（119 MySQL 源库必须先改，再改 17 PG public.iot 副本），最后逐台调用 DSS 同步接口（pushData，同 push_ysb）。必须先在 preview 里确认，再加 --yes 执行。NOT auto-triggered by natural language — invoke this skill explicitly (e.g. /dt-owner-modify) before running any of its scripts."
 argument-hint: "IMEI（可多个）、新机主（id 或名称）、新经销商（可选，id 或名称）"
 ---
 
 # 大田修改机主 / 经销商
 
-把一台或多台设备的**机主**（`ysb.install_iot_owner.customer_id`）改成指定客户；若同时给经销商，则把 6 处经销商字段一并改成该企业，然后调用 DSS 同步接口把变更推到平台。只接受**显式调用**，不响应任何自然语言触发。
+把一台或多台设备的**机主**（`ysb.install_iot_owner.customer_id`）改成指定客户；若同时给经销商，则把 6 处经销商/归属企业字段一并改成该企业，然后调用 DSS 同步接口把变更推到平台。只接受**显式调用**，不响应任何自然语言触发。
+
+> **归属企业（owner_company）存在于两个库**：`119 MySQL machine.iot` 是源库，`17 PG public.iot` 是它的副本、会被平台反向同步覆盖。**必须先改 119，再改 17**；只改 17 会在几秒后被旧值回写，且回读 17 当时可能仍显示"已改"而误判成功。核验必须两个库都查。
 
 ## 术语与字段
 
@@ -17,16 +19,18 @@ argument-hint: "IMEI（可多个）、新机主（id 或名称）、新经销商
 | 经销商 | `basic.company.id/name` | `--distributor` | 只接受 `basic.company.status = 10`；名称从 basic.company 取 |
 | 机主所属分发商 | `ysb.customer.company_ids` | — | 同名机主多条时用它优先匹配（见下） |
 
-经销商要改的 6 个字段：
+经销商要改的 6 个字段（按执行顺序）：
 
-| # | 表 | 字段 |
+| # | 库 / 表 | 字段 |
 |---|---|---|
-| 1 | `ysb.install_iot_owner` | `distributor_id` |
-| 2 | `ysb.install_iot` | `company_id` |
-| 3 | `ysb.install_iot` | `install_distributor_company_id` |
-| 4 | `ysb.install_iot_machine` | `distributor_id` |
-| 5 | `public.iot`（machine 库） | `owner_company_id` + `owner_company`（名称） |
-| 6 | `contract.iot`（dss 库，`prod_192.168.5.129_dss_owner`） | `owner_company_id` + `owner_company`（名称） |
+| 1 | `machine.iot`（**119 MySQL**，`prod_192.168.5.119_machine`）— 归属企业**源库** | `owner_company_id` + `owner_company`（名称） |
+| 2 | `ysb.install_iot_owner`（17 PG） | `distributor_id` |
+| 3 | `ysb.install_iot`（17 PG） | `company_id` |
+| 4 | `ysb.install_iot`（17 PG） | `install_distributor_company_id` |
+| 5 | `ysb.install_iot_machine`（17 PG） | `distributor_id` |
+| 6 | `public.iot`（17 PG）— **119 的副本**，写入后会被平台同步对齐 | `owner_company_id` + `owner_company`（名称） |
+
+不再修改 dss 的 `contract.iot`。
 
 ## 输入
 
@@ -42,7 +46,7 @@ argument-hint: "IMEI（可多个）、新机主（id 或名称）、新经销商
 python "E:/Dev/jianglei/skills/dt-owner-modify/scripts/check_env.py"
 ```
 
-检查 dbx CLI、`DT_USERNAME`/`DT_PASSWORD`、连接 `prod_192.168.5.17_machine`、两张 ysb 表可读。只输出 PASS/FAIL，**不输出凭据值**。任一 FAIL 即停止。
+检查 dbx CLI、`DT_USERNAME`/`DT_PASSWORD`、连接 `prod_192.168.5.17_machine`（PG）与 `prod_192.168.5.119_machine`（MySQL）、两张 ysb 表与 `machine.iot` 可读。只输出 PASS/FAIL，**不输出凭据值**。任一 FAIL 即停止。
 
 ## Step 1: 预查询并展示（只读）
 
@@ -58,7 +62,7 @@ python "E:/Dev/jianglei/skills/dt-owner-modify/scripts/preview.py" \
 2. `[2] 新经销商` — 解析结果（来自 `basic.company`）
 3. `[3] 机主表核对` — 逐台现机主，以及该台**仍未一致的经销商字段**
 4. `[4] 将执行的 SQL` — machine 库单条多表语句
-5. `[5] 将执行的 SQL` — dss 库 `contract.iot`（仅给了经销商时）
+5. `[5] 将执行的 SQL` — 119 MySQL `machine.iot`（仅给了经销商时）
 6. `[6] DSS 同步` — 接口与请求体
 7. `[7] 结论` — `[OK]` 或 `[ABORT]`
 
@@ -80,10 +84,9 @@ python "E:/Dev/jianglei/skills/dt-owner-modify/scripts/update_owner.py" \
 ```
 
 - 无 `--yes` 时拒绝写入（防止跳过确认）。
-- 顺序：**先登录拿 token**（拿不到就整体中止，避免改了库却推不了同步）→ machine 库单条多表语句 → dss 库 `contract.iot` → 回读全部字段校验 → 逐台 POST 同步。
-- machine 库的 4 张表在执行后按表打印命中行数，未命中的 IMEI 会列出。
-- `contract.iot` 无该 IMEI 时打印「该库无对应 iot 记录，跳过」，不算失败。
-- 回读不一致、dss 写入失败或同步失败时退出码 1。
+- 顺序：**先登录拿 token**（拿不到就整体中止，避免改了库却推不了同步）→ **119 MySQL `machine.iot`** → 17 machine 库单条多表语句（ysb 四表 + `public.iot`）→ 回读全部字段（含 119）校验 → 逐台 POST 同步。119 必须先写，否则 17 的改动会被平台按旧值回写。
+- 17 machine 库的 4 张表在执行后按表打印命中行数，未命中的 IMEI 会列出；119 侧打印 MySQL 的 `Rows matched / Changed`。
+- 回读不一致、119 写入失败或同步失败时退出码 1。
 - `--dry-run` 只打印 SQL 与同步调用，不写库、不联网。
 
 ## 实际执行的 SQL
@@ -118,14 +121,15 @@ union all select 'machine', imei from m
 union all select 'iot', imei from p
 ```
 
-dss 库：
+119 MySQL 库（**先执行**，归属企业源库）：
 
 ```sql
-update contract.iot
+update machine.iot
    set owner_company_id = <经销商 id>, owner_company = '<经销商名称>'
  where imei in (...)
-returning imei
 ```
+
+17 PG 的 `public.iot` 是它的副本：脚本随后写一次，平台同步也会把 119 的值对齐过来。核验时两个库都要查，只有 17 通过不算成功。
 
 只改机主（不给 `--distributor`）时仍是单表单条：
 
@@ -158,6 +162,7 @@ HTTP 200 且有业务码时校验 `code ∈ {0, 200, 20000}` 且 `success != fal
 | 新机主多条同名 | 优先取 `company_ids` 含**目标经销商 id**（未给则用设备当前 distributor_id）的一条；未命中则任取一条，并在 `注:` 写明 |
 | 新机主多条不同名 | 先按经销商命中 `company_ids`；仍未命中才 `[ABORT]`，列出候选（含 status / 设备数 / company_ids） |
 | 新机主 `status != 10` | `[ABORT]`，拒绝写入 |
+| 119 MySQL 写入失败 | 打印 `[WARN]`，仍继续 17 与同步，退出码 1（此时 17 的归属可能被回写，须重跑） |
 | 经销商 0 条 / 多条无法唯一确定 | `[ABORT]`，列出候选，要求改用 id |
 | IMEI 在机主表中无有效行 | `[WARN]`，跳过该台，其余继续 |
 | 所有 IMEI 都已一致 / 都不存在 | `[ABORT]`，无事可做 |
@@ -167,8 +172,8 @@ HTTP 200 且有业务码时校验 `code ∈ {0, 200, 20000}` 且 `success != fal
 ## 环境要求
 
 - `DT_USERNAME` / `DT_PASSWORD`（登录凭据，仅脚本读取）
-- `dbx` CLI + 连接 `prod_192.168.5.17_machine`（machine）与 `prod_192.168.5.129_dss_owner`（dss，改经销商时需要，允许写）
-- machine 连接必须允许写入（脚本带 `--allow-writes`）
+- `dbx` CLI + 连接 `prod_192.168.5.17_machine`（PG machine）与 `prod_192.168.5.119_machine`（MySQL machine，改经销商时需要）
+- 两个连接都必须允许写入（脚本带 `--allow-writes`）
 - Python 3.10+（仅标准库）
 
 ## 脚本清单
@@ -178,5 +183,5 @@ HTTP 200 且有业务码时校验 `code ∈ {0, 200, 20000}` 且 `success != fal
 | `check_env.py` | 环境检查 | 只读 |
 | `get_token.py` | 登录拿 token | 只读 |
 | `common.py` | 共用：多表状态读取、机主/经销商解析、SQL 组装 | 只读 |
-| `preview.py` | 预查询并展示将执行的两段 SQL | 只读 |
-| `update_owner.py` | 改库（machine + dss）+ 回读校验 + DSS 同步 | 写入 |
+| `preview.py` | 预查询并展示将执行的两段 SQL（119 MySQL + 17 machine） | 只读 |
+| `update_owner.py` | 改库（119 MySQL → 17 machine）+ 回读校验（两库）+ DSS 同步 | 写入 |

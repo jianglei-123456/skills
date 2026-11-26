@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Re-point the owner (and optionally the distributor) of IMEIs, then sync DSS.
 
-Step 1 writes, in one statement on the machine db: ysb.install_iot_owner
-(customer_id, distributor_id), ysb.install_iot (company_id,
-install_distributor_company_id), ysb.install_iot_machine (distributor_id) and
-public.iot (owner_company_id, owner_company). Step 2 mirrors ownerCompanyId /
-ownerCompany into dss contract.iot. Step 3 re-reads everything to verify, step 4
-posts the DSS sync endpoint once per IMEI (same call as push_ysb.py).
+Step 1 writes owner_company_id / owner_company into machine.iot on the 119
+MySQL库 — that is the SOURCE of 归属企业. Step 2 writes, in one statement on
+the 17 machine db: ysb.install_iot_owner (customer_id, distributor_id),
+ysb.install_iot (company_id, install_distributor_company_id),
+ysb.install_iot_machine (distributor_id) and public.iot (owner_company_id,
+owner_company). 17's public.iot is a replica of 119 machine.iot and gets
+overwritten by the platform sync, so 119 must be written first and both are
+re-read in step 3. Step 4 posts the DSS sync endpoint once per IMEI (same call
+as push_ysb.py).
 
 Requires --yes: the user must confirm the preview first.
 
@@ -106,8 +109,8 @@ def main() -> None:
         print(f"[DRY-RUN] 新机主 {owner['name']} ({owner['id']})"
               + (f"，新经销商 {distributor['name']} ({distributor['id']})" if distributor else ""))
         print(plan["sql"])
-        if plan["dss_sql"]:
-            print(plan["dss_sql"])
+        if plan["mysql_sql"]:
+            print("[119 MySQL]\n" + plan["mysql_sql"])
         for imei in target_imeis:
             print(f'[DRY-RUN] POST {SYNC_URL} {{"imei": "{imei}"}}')
         sys.exit(0)
@@ -128,7 +131,21 @@ def main() -> None:
           + f"  待修改={len(target_imeis)}  已一致={len(plan['unchanged'])}  "
             f"未找到={len(plan['missing'])}")
 
-    # Step 1: machine db.
+    # Step 1: 119 MySQL machine.iot — the source of 归属企业. Must run before
+    # the 17 copy, otherwise the platform sync pushes the old value back.
+    mysql_failed = False
+    if distributor:
+        try:
+            resp = common.dbx_exec(common.DBX_MYSQL_MACHINE, plan["mysql_sql"])
+            msgs = "; ".join(m.get("message", "") for m in (resp.get("messages") or []) if m.get("message"))
+            print(f"\n[MYSQL] 119 machine.iot: {msgs or 'OK'}")
+        except common.AbortError as e:
+            mysql_failed = True
+            print(f"\n[WARN] 119 machine.iot 更新失败: {e.message}")
+            for line in e.details:
+                print(f"        {line}")
+
+    # Step 2: 17 machine db (ysb 四表 + public.iot 副本).
     try:
         rows = common.dbx_rows(common.DBX_MACHINE, plan["sql"], write=True)
     except common.AbortError as e:
@@ -154,19 +171,6 @@ def main() -> None:
     for imei in target_imeis:
         print(f"    {imei} -> {'OK' if imei in updated_imeis else 'MISS'}")
 
-    # Step 2: dss db (ownerCompanyId / ownerCompany mirror).
-    dss_failed = False
-    if distributor:
-        try:
-            dss_rows = common.dbx_rows(common.DBX_DSS, plan["dss_sql"], write=True)
-            print(f"\n[DSS] contract.iot 已更新 {len(dss_rows)} 行"
-                  + ("" if dss_rows else "（该库无对应 iot 记录，跳过）"))
-        except common.AbortError as e:
-            dss_failed = True
-            print(f"\n[WARN] dss contract.iot 更新失败: {e.message}")
-            for line in e.details:
-                print(f"        {line}")
-
     # Step 3: read back.
     bad, details = verify(updated_imeis, owner["id"],
                           distributor["id"] if distributor else None) if updated_imeis else ([], {})
@@ -190,9 +194,9 @@ def main() -> None:
     if plan["missing"]:
         print(f"    missing:  {len(plan['missing'])}  ({', '.join(plan['missing'])})")
     print(f"    synced:   {len(synced)}/{len(updated_imeis)}")
-    if sync_failed or bad or dss_failed:
-        if dss_failed:
-            print("    dss contract.iot: 更新失败")
+    if sync_failed or bad or mysql_failed:
+        if mysql_failed:
+            print("    119 machine.iot: 更新失败")
         if sync_failed:
             print(f"    sync failed: {', '.join(sync_failed)}")
         if bad:

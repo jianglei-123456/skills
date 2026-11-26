@@ -13,7 +13,9 @@ import re
 import subprocess
 
 DBX_MACHINE = "prod_192.168.5.17_machine"
-DBX_DSS = "prod_192.168.5.129_dss_owner"
+# 归属企业（owner_company）的源库：119 MySQL machine.iot。17 的 public.iot
+# 是它的副本，会被平台反向同步覆盖，所以 119 必须先写。
+DBX_MYSQL_MACHINE = "prod_192.168.5.119_machine"
 MAX_OWNER_CANDIDATES = 20
 ACTIVE_STATUS = 10
 
@@ -27,12 +29,8 @@ class AbortError(Exception):
         self.details = details or []
 
 
-def dbx_rows(conn: str, sql: str, write: bool = False) -> list:
-    """Run one statement through the dbx CLI and return its rows.
-
-    The CLI returns every value as a string, so callers normalise ids
-    through as_int() instead of comparing raw values.
-    """
+def _dbx_run(conn: str, sql: str, write: bool = False) -> dict:
+    """Run one statement through the dbx CLI and return the raw JSON response."""
     # One line: Windows shells mangle multi-line quoted arguments, and dbx
     # then misses --allow-writes. Line-leading indentation is dropped only.
     flat_sql = " ".join(line.strip() for line in sql.splitlines())
@@ -53,7 +51,25 @@ def dbx_rows(conn: str, sql: str, write: bool = False) -> list:
         err = resp["error"]
         message = err.get("message", "") if isinstance(err, dict) else str(err)
         raise AbortError(f"dbx error on {conn}", [message])
-    return resp.get("rows", [])
+    return resp
+
+
+def dbx_rows(conn: str, sql: str, write: bool = False) -> list:
+    """Run one statement and return its rows.
+
+    The CLI returns every value as a string, so callers normalise ids
+    through as_int() instead of comparing raw values.
+    """
+    return _dbx_run(conn, sql, write).get("rows", [])
+
+
+def dbx_exec(conn: str, sql: str) -> dict:
+    """Run a write statement and return the raw response (rows + messages).
+
+    MySQL reports affected rows in `messages` rather than through RETURNING,
+    so write callers read that instead of len(rows).
+    """
+    return _dbx_run(conn, sql, write=True)
 
 
 def sql_str(value) -> str:
@@ -248,7 +264,7 @@ def fetch_state(imeis: list[str]) -> dict[str, dict]:
 
     Keys: owner_customer_id, owner_distributor_id, install_company_id,
     install_distributor_company_id, machine_distributor_id,
-    iot_owner_company_id (machine public.iot), dss_iot_owner_company_id.
+    iot_owner_company_id (17 public.iot), mysql_iot_owner_company_id (119 machine.iot).
     """
     if not imeis:
         return {}
@@ -290,16 +306,17 @@ def fetch_state(imeis: list[str]) -> dict[str, dict]:
     ):
         put(r["imei"], iot_owner_company_id=as_int(r.get("owner_company_id")))
 
-    for r in _dss_iot_rows(lst):
-        put(r["imei"], dss_iot_owner_company_id=as_int(r.get("owner_company_id")))
+    for r in _mysql_iot_rows(lst):
+        put(r["imei"], mysql_iot_owner_company_id=as_int(r.get("owner_company_id")))
 
     return state
 
 
-def _dss_iot_rows(lst: str) -> list:
-    """Rows of the DSS-side iot table; empty when the connection/table is absent."""
+def _mysql_iot_rows(lst: str) -> list:
+    """Rows of 119 MySQL machine.iot; empty when the connection/table is absent."""
     try:
-        return dbx_rows(DBX_DSS, f"select imei, owner_company_id from contract.iot where imei in ({lst})")
+        return dbx_rows(DBX_MYSQL_MACHINE,
+                        f"select imei, owner_company_id from machine.iot where imei in ({lst})")
     except AbortError:
         return []
 
@@ -311,7 +328,7 @@ DIST_FIELDS = (
     ("install_distributor_company_id", "install_iot.install_distributor_company_id"),
     ("machine_distributor_id", "install_iot_machine.distributor_id"),
     ("iot_owner_company_id", "public.iot.owner_company_id"),
-    ("dss_iot_owner_company_id", "contract.iot.owner_company_id"),
+    ("mysql_iot_owner_company_id", "machine.iot.owner_company_id (119 MySQL)"),
 )
 
 
@@ -375,13 +392,13 @@ def build_update_sql(imeis: list[str], owner_id: int, distributor_id: int | None
     )
 
 
-def build_dss_sql(imeis: list[str], distributor_id: int, distributor_name: str) -> str:
+def build_mysql_iot_sql(imeis: list[str], distributor_id: int, distributor_name: str) -> str:
+    """119 MySQL machine.iot — the source that 17's public.iot follows."""
     return (
-        "update contract.iot\n"
+        "update machine.iot\n"
         f"   set owner_company_id = {distributor_id},\n"
         f"       owner_company = {sql_str(distributor_name)}\n"
-        f" where imei in ({sql_list(imeis)})\n"
-        "returning imei"
+        f" where imei in ({sql_list(imeis)})"
     )
 
 
@@ -389,8 +406,8 @@ def build_plan(imeis: list[str], owner_raw: str, distributor_raw: str | None = N
     """Work out what to change.
 
     distributor_raw is optional; when given, the distributor is re-pointed in
-    install_iot_owner, install_iot, install_iot_machine, public.iot (machine)
-    and contract.iot (dss) as well.
+    machine.iot (119 MySQL, the source), install_iot_owner, install_iot,
+    install_iot_machine and public.iot (17 PG) as well.
     """
     if not imeis:
         raise AbortError("未提供 IMEI")
@@ -443,6 +460,6 @@ def build_plan(imeis: list[str], owner_raw: str, distributor_raw: str | None = N
         "sql": build_update_sql(target_imeis, owner["id"],
                                 distributor["id"] if distributor else None,
                                 distributor["name"] if distributor else None),
-        "dss_sql": (build_dss_sql(target_imeis, distributor["id"], distributor["name"])
-                    if distributor else ""),
+        "mysql_sql": (build_mysql_iot_sql(target_imeis, distributor["id"], distributor["name"])
+                      if distributor else ""),
     }

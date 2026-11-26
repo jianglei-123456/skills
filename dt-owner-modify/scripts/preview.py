@@ -77,9 +77,9 @@ def main() -> None:
     print(f"\n[4] 将执行的 SQL (machine 库, 共 {len(plan['targets'])} 台)")
     for line in plan["sql"].splitlines():
         print(f"    {line}")
-    if plan["dss_sql"]:
-        print("\n[5] 将执行的 SQL (dss 库 contract.iot)")
-        for line in plan["dss_sql"].splitlines():
+    if plan["mysql_sql"]:
+        print("\n[5] 将执行的 SQL (119 MySQL machine.iot — 归属企业源库，必须先改)")
+        for line in plan["mysql_sql"].splitlines():
             print(f"    {line}")
 
     print("\n[6] 变更后调用 DSS 同步接口 (每台一次)")

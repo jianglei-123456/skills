@@ -4,8 +4,9 @@
 Checks (read-only; prints status only, never credential values):
   1. dbx CLI installed
   2. DT_USERNAME / DT_PASSWORD present (DSS sync login)
-  3. the machine dbx connection exists
-  4. ysb.customer and ysb.install_iot_owner are readable
+  3. the dbx connections exist (17 PG machine + 119 MySQL machine)
+  4. ysb.customer / ysb.install_iot_owner (17 PG) and machine.iot (119 MySQL)
+     are readable
 
     python check_env.py
 """
@@ -16,6 +17,8 @@ import subprocess
 import sys
 
 DBX_CONNECTION = "prod_192.168.5.17_machine"
+DBX_MYSQL_MACHINE = "prod_192.168.5.119_machine"
+REQUIRED_CONNECTIONS = [DBX_CONNECTION, DBX_MYSQL_MACHINE]
 DBX_INSTALL_CMD = "npm install -g @dbx-app/cli"
 REQUIRED_ENV_VARS = ["DT_USERNAME", "DT_PASSWORD"]
 REQUIRED_TABLES = ["customer", "install_iot_owner"]
@@ -47,7 +50,7 @@ def check_env_vars() -> bool:
 
 
 def check_connection() -> bool:
-    print("[3] dbx connection")
+    print("[3] dbx connections")
     out = subprocess.run("dbx connections list --json", capture_output=True,
                          encoding="utf-8", shell=True)
     if out.returncode != 0:
@@ -58,12 +61,15 @@ def check_connection() -> bool:
     except json.JSONDecodeError:
         print("    FAIL  dbx connections list returned non-JSON output")
         return False
-    if DBX_CONNECTION in names:
-        print(f"    PASS  {DBX_CONNECTION}")
-        return True
-    print(f"    FAIL  {DBX_CONNECTION} NOT found")
-    print("          create it in DBX Desktop (human step); see README.md")
-    return False
+    ok = True
+    for conn in REQUIRED_CONNECTIONS:
+        if conn in names:
+            print(f"    PASS  {conn}")
+        else:
+            print(f"    FAIL  {conn} NOT found")
+            print("          create it in DBX Desktop (human step); see README.md")
+            ok = False
+    return ok
 
 
 def check_tables() -> bool:
@@ -88,6 +94,25 @@ def check_tables() -> bool:
         else:
             print(f"    FAIL  ysb.{table} NOT found")
             ok = False
+
+    print("[5] 119 MySQL machine.iot")
+    sql = ("select table_name from information_schema.tables "
+           "where table_schema = 'machine' and table_name = 'iot'")
+    out = subprocess.run(f'dbx query {DBX_MYSQL_MACHINE} "{sql}" --json',
+                         capture_output=True, encoding="utf-8", shell=True)
+    if out.returncode != 0:
+        print(f"    FAIL  query failed: {out.stderr.strip()}")
+        return False
+    try:
+        rows = json.loads(out.stdout).get("rows", [])
+    except json.JSONDecodeError:
+        print("    FAIL  non-JSON output")
+        return False
+    if rows:
+        print(f"    PASS  {DBX_MYSQL_MACHINE} machine.iot")
+    else:
+        print(f"    FAIL  machine.iot NOT found on {DBX_MYSQL_MACHINE}")
+        ok = False
     return ok
 
 
